@@ -7,7 +7,7 @@ from endpoints.models import Endpoint
 class Delivery(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
-        RPOCESSING = "processing", "Processing"
+        PROCESSING = "processing", "Processing"
         SUCCESS = "success", "Success"
         FAILED = "failed", "Failed"
 

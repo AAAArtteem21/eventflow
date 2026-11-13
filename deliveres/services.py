@@ -1,6 +1,7 @@
 from .models import Delivery
 from endpoints.models import Endpoint
 import httpx
+from django.db import transaction
 
 def create_deliveries_for_event(event):
     endpoints = Endpoint.objects.filter(
@@ -72,3 +73,22 @@ def send_delivery(delivery: Delivery) -> Delivery:
     )
 
     return delivery
+
+def enqueue_deliveries(delivery_ids):
+    for delivery_id in delivery_ids:
+        send_delivery_task.delay(delivery_id)
+
+
+def claim_delivery(delivery_id):
+    with transaction.atomic():
+        delivery = Delivery.objects.select_for_update().get(id=delivery_id)
+        if delivery.status != Delivery.Status.PENDING:
+            return None
+        delivery.status = Delivery.Status.PROCESSING
+        delivery.save(
+            update_fields = (
+                "status",
+            )
+        )
+    return delivery
+    

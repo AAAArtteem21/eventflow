@@ -3,17 +3,7 @@
 from pathlib import Path
 from decouple import config
 import environ
-import os
-from celery import Celery
 
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-
-app = Celery("eventflow")
-
-app.config_from_object("django.conf:settings", namespace="CELERY")
-
-app.autodiscover_tasks()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 

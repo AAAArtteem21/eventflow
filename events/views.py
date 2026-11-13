@@ -4,7 +4,11 @@ from .serializers import EventSerializer
 from .models import Event
 from django.db import IntegrityError, transaction
 from rest_framework.response import Response
-from deliveres.services import create_deliveries_for_event
+from deliveres.services import (
+    create_deliveries_for_event,
+    enqueue_deliveries,
+)
+from deliveres.tasks import enqueue_deliveries
 
 class EventViewSets(
     mixins.CreateModelMixin,
@@ -28,7 +32,13 @@ class EventViewSets(
             with transaction.atomic():
                 event = serializer.save(owner=request.user)
 
-                create_deliveries_for_event(event)
+                deliveries = create_deliveries_for_event(event)
+
+                delivery_ids = [str(delivery.id) for delivery in deliveries]
+
+                transaction.on_commit(
+                    lambda: enqueue_deliveries(delivery_ids)
+                )
 
         except IntegrityError:
             return Response(
