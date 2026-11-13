@@ -4,7 +4,7 @@ from .serializers import EventSerializer
 from .models import Event
 from django.db import IntegrityError, transaction
 from rest_framework.response import Response
-
+from deliveres.services import create_deliveries_for_event
 
 class EventViewSets(
     mixins.CreateModelMixin,
@@ -14,6 +14,8 @@ class EventViewSets(
 ):
     serializer_class = EventSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
         return Event.objects.filter(owner=self.request.user)
@@ -25,6 +27,8 @@ class EventViewSets(
         try:
             with transaction.atomic():
                 event = serializer.save(owner=request.user)
+
+                create_deliveries_for_event(event)
 
         except IntegrityError:
             return Response(

@@ -13,6 +13,7 @@ class Endpoint(models.Model):
     url = models.URLField()
     secret = models.CharField(max_length=64, default=generate_endpoints_secret, editable=True)
     is_active = models.BooleanField(default=True)
+    subscribed_events = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
