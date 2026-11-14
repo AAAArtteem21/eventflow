@@ -1,8 +1,11 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
-
-from .models import DeliveryAttempt
-from .serializers import DeliverAttemptSerializer
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
+from .services import retry_delivery
+from .models import DeliveryAttempt, Delivery
+from .serializers import DeliverAttemptSerializer, DeliverySerializer
 
 
 class DeliveryAttemptViewSet(viewsets.ReadOnlyModelViewSet):
@@ -25,3 +28,37 @@ class DeliveryAttemptViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         return queryset.order_by("attempt_number")
+
+
+class DeliveryViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = DeliverySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            Delivery.objects
+            .filter(event__owner=self.request.user)
+            .select_related("event", "endpoint")
+        )
+
+    @action(detail=True, methods=['post'])
+    def retry(self, request, pk=None):
+        delivery = self.get_object()
+
+        try:
+            delivery = retry_delivery(
+                delivery_id=delivery.id,
+                user=request.user
+            )
+        except Exception as exc:
+            return Response(
+                {"detail": str(exc.message)},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = self.get_serializer(delivery)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )

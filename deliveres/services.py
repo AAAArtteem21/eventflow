@@ -3,6 +3,7 @@ from endpoints.models import Endpoint
 import httpx
 from django.db import transaction
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 MAX_ATTEMPTS = 8
 
@@ -135,3 +136,26 @@ def get_retry_delay(attempts):
 def is_retryable_status(status_code):
     allowed_http = {408, 425, 429, 500, 502, 503, 504}
     return status_code in allowed_http
+
+
+def retry_delivery(delivery_id, user):
+    with transaction.atomic():
+        delivery = Delivery.objects.select_for_update().get(
+            id=delivery_id,
+            event__owner=user,
+        )
+        if delivery.status != Delivery.Status.FAILED:
+            raise ValidationError("Delivery cannot be retried")
+        delivery.status = Delivery.Status.PENDING
+        delivery.next_retry_at = None
+        delivery.save(
+            update_fields=(
+            "status",
+            "next_retry_at",
+            "updated_at"
+        ))
+        transaction.on_commit(
+            lambda: send_delivery_task.delay(str(delivery.id))
+        )
+
+    return delivery
