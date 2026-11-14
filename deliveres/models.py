@@ -46,3 +46,50 @@ class Delivery(models.Model):
             f"Delivery {self.id}:"
             f"{self.event.event_type} -> {self.endpoint.name}"
         )
+
+
+class DeliveryAttempt(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    delivery = models.ForeignKey(
+        "deliveres.Delivery",
+        on_delete=models.CASCADE,
+        related_name="attempt_history",
+    )
+
+    attempt_number = models.PositiveIntegerField()
+
+    response_status = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    response_body = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    error = models.TextField(
+        null=True,
+        blank=True,
+    )
+
+    started_at = models.DateTimeField(auto_now_add=True)
+
+    finished_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["attempt_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["delivery", "attempt_number"],
+                name="unique_delivery_attempt_number",
+            ),
+        ]

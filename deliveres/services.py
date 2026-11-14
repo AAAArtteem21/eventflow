@@ -2,7 +2,6 @@ from .models import Delivery
 from endpoints.models import Endpoint
 import httpx
 from django.db import transaction
-from .tasks import send_delivery_task
 from django.utils import timezone
 
 MAX_ATTEMPTS = 8
@@ -36,6 +35,7 @@ def send_delivery(delivery: Delivery) -> Delivery:
     }
 
     delivery.attempts += 1
+    should_retry = False
 
     try:
         response = httpx.post(
@@ -49,33 +49,38 @@ def send_delivery(delivery: Delivery) -> Delivery:
         if 200 <= response.status_code < 300:
             delivery.status = Delivery.Status.SUCCESS
             delivery.last_error = None
-            delivery.next_retry_at = None
 
         else:
             delivery.status = Delivery.Status.FAILED
             delivery.last_error = (
                 f"HTTP {response.status_code}: {response.text[:1000]}"
             )
+            should_retry = is_retryable_status(response.status_code)
 
     except httpx.TimeoutException:
         delivery.status = Delivery.Status.FAILED
         delivery.last_error = "Request timed out"
         delivery.last_response_status = None
+        should_retry = True
 
     except httpx.RequestError as exc:
         delivery.status = Delivery.Status.FAILED
         delivery.last_error = str(exc)[:1000]
         delivery.last_response_status = None
+        should_retry = True
 
-    if delivery.status == Delivery.Status.FAILED:
-        if delivery.attempts < MAX_ATTEMPTS:
-            delay = get_retry_delay(delivery.attempts)
+    if delivery.status == Delivery.Status.SUCCESS:
+        delivery.next_retry_at = None
 
-            delivery.next_retry_at = (
-                timezone.now() + timezone.timedelta(seconds=delay)
-            )
-        else:
-            delivery.next_retry_at = None
+    elif should_retry and delivery.attempts < MAX_ATTEMPTS:
+        delay = get_retry_delay(delivery.attempts)
+
+        delivery.next_retry_at = (
+            timezone.now() + timezone.timedelta(seconds=delay)
+        )
+
+    else:
+        delivery.next_retry_at = None
 
     delivery.save(
         update_fields=[
@@ -89,7 +94,6 @@ def send_delivery(delivery: Delivery) -> Delivery:
     )
 
     return delivery
-
 
 def enqueue_deliveries(delivery_ids):
     for delivery_id in delivery_ids:
@@ -127,3 +131,7 @@ def get_retry_delay(attempts):
 
     delay = initial_delay * (2 ** (attempts - 1))
     return min(delay, max_delay)
+
+def is_retryable_status(status_code):
+    allowed_http = {408, 425, 429, 500, 502, 503, 504}
+    return status_code in allowed_http
