@@ -1,4 +1,4 @@
-from .models import Delivery
+from .models import Delivery, OutboxMessage
 from endpoints.models import Endpoint
 import httpx
 import uuid
@@ -9,6 +9,7 @@ from datetime import timedelta
 
 MAX_ATTEMPTS = 8
 
+@transaction.atomic
 def create_deliveries_for_event(event):
     endpoints = Endpoint.objects.filter(
         owner=event.owner,
@@ -24,8 +25,10 @@ def create_deliveries_for_event(event):
         for endpoint in endpoints
     ]
 
-    return Delivery.objects.bulk_create(deliveries)
+    created =  Delivery.objects.bulk_create(deliveries)
+    outbox_messages = [OutboxMessage(delivery=delivery) for delivery in created]
 
+    OutboxMessage.objects.bulk_create(outbox_messages)
 
 def send_delivery(delivery: Delivery) -> Delivery:
     event = delivery.event
