@@ -3,6 +3,7 @@ import uuid
 from django.conf import settings
 from events.models import Event
 from endpoints.models import Endpoint
+from django.db.models import Q
 
 class Delivery(models.Model):
     class Status(models.TextChoices):
@@ -95,5 +96,35 @@ class DeliveryAttempt(models.Model):
             models.UniqueConstraint(
                 fields=["delivery", "attempt_number"],
                 name="unique_delivery_attempt_number",
+            ),
+        ]
+
+
+class OutboxMessage(models.Model):
+    id = models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
+    delivery = models.ForeignKey(
+        Delivery,
+        on_delete=models.CASCADE,
+        related_name="outbox_messages",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    attempt = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["created_at"]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["delivery"],
+                condition=Q(processed_at__isnull=True),
+                name="unique_unprocessed_outbox_per_delivery",
+            ),
+        ]
+
+        indexes = [
+            models.Index(
+                fields=["processed_at", "created_at"],
+                name="outbox_pending_created_idx",
             ),
         ]
