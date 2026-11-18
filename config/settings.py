@@ -118,8 +118,12 @@ CELERY_BROKER_URL = "redis://localhost:6379/0"
 CELERY_RESULT_BACKEND = "redis://localhost:6379/1"
 CELERY_TASK_TRACK_STARTED = True
 CELERY_BEAT_SCHEDULE = {
-    "dispatch-due-retries-every-30-seconds": {
-        "task": "deliveries.tasks.dispatch_due_retries",
-        "shedule": timedelta(seconds=30),
+    "dispatch-due-retries": {
+        "task": "deliveres.tasks.dispatch_due_retries",
+        "schedule": 30.0,
+    },
+    "recover-stuck-deliveries": {
+        "task": "deliveres.tasks.recover_stuck_deliveries_task",
+        "schedule": 60.0,
     },
 }
