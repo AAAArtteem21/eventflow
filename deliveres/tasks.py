@@ -1,11 +1,11 @@
 from celery import shared_task
 from datetime import timedelta
 
-from .models import Delivery
+from .models import Delivery, OutboxMessage
 from .services import send_delivery, claim_delivery, recover_stuck_deliveries
 from django.utils import timezone
 from django.db import transaction
-
+from django.db.models import Q
 
 
 @shared_task
@@ -45,3 +45,53 @@ def recover_stuck_deliveries_task():
 def enqueue_deliveries(delivery_ids):
     for delivery_id in delivery_ids:
         send_delivery_task.delay(str(delivery_id))
+
+
+@shared_task
+def dispatch_outbox_messages():
+    now = timezone.now()
+    deadline = now - timedelta(minutes=5)
+
+    with transaction.atomic():
+        outbox_messages = list(
+            OutboxMessage.objects
+            .select_for_update(skip_locked=True)
+            .filter(
+                processed_at__isnull=True,
+            )
+            .filter(
+                Q(claimed_at__isnull=True)
+                | Q(claimed_at__lt=deadline)
+            )
+            .order_by("created_at")[:100]
+        )
+
+        message_ids = [
+            message.id for message in outbox_messages
+        ]
+
+        OutboxMessage.objects.filter(
+            id__in=message_ids,
+        ).update(claimed_at=now)
+
+    published_count = 0
+
+    for message in outbox_messages:
+        try:
+            send_delivery_task.delay(
+                str(message.delivery_id)
+            )
+        except Exception:
+            continue
+
+        OutboxMessage.objects.filter(
+            id=message.id,
+            processed_at__isnull=True,
+        ).update(
+            processed_at=timezone.now(),
+            claimed_at=None,
+        )
+
+        published_count += 1
+
+    return published_count

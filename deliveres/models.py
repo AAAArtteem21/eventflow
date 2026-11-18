@@ -108,6 +108,7 @@ class OutboxMessage(models.Model):
         related_name="outbox_messages",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
     processed_at = models.DateTimeField(null=True, blank=True)
     attempt = models.PositiveIntegerField(default=0)
 
