@@ -1,9 +1,11 @@
 from .models import Delivery
 from endpoints.models import Endpoint
 import httpx
+import uuid
 from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from datetime import timedelta
 
 MAX_ATTEMPTS = 8
 
@@ -115,9 +117,15 @@ def claim_delivery(delivery_id):
             return None
         delivery.status = Delivery.Status.PROCESSING
         delivery.next_retry_at = None
+        delivery.processing_started_at = now
+        delivery.processing_token = uuid.uuid4()
         delivery.save(
             update_fields = (
                 "status",
+                "next_retry_at",
+                "processing_started_at",
+                "processing_token",
+                "updated_at",
             )
         )
     return delivery
@@ -159,3 +167,25 @@ def retry_delivery(delivery_id, user):
         )
 
     return delivery
+
+def recover_stuck_deliveries():
+    stuck_before = timezone.now() - timedelta(minutes=5)
+
+    with transaction.atomic():
+        deliveries = (
+            Delivery.objects
+            .select_for_update()
+            .filter(
+                status=Delivery.Status.PROCESSING,
+                processing_started_at__lt=stuck_before,
+            )
+        )
+
+        recovered_count = deliveries.update(
+            status=Delivery.Status.PENDING,
+            processing_started_at=None,
+            processing_token=None,
+            updated_at=timezone.now(),
+        )
+
+    return recovered_count

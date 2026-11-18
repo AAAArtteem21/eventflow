@@ -19,6 +19,10 @@ class Delivery(models.Model):
     next_retry_at = models.DateTimeField(null=True, blank=True)
     last_response_status = models.PositiveSmallIntegerField(null=True,blank=True)
     last_error = models.TextField(null=True, blank=True)
+    processing_started_at = models.DateTimeField(
+        null=True, blank=True
+    )
+    processing_token = models.UUIDField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
