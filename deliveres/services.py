@@ -189,3 +189,24 @@ def recover_stuck_deliveries():
         )
 
     return recovered_count
+
+def save_delivery_result(delivery_id, processing_token, status, response_status=None):
+    with transaction.atomic():
+        delivery = Delivery.objects.select_for_update().get(id=delivery_id)
+        if delivery.status != Delivery.Status.PROCESSING:
+            return False 
+        elif delivery.processing_token != processing_token:
+            return False
+        delivery.status = status
+        delivery.last_response_status = response_status
+        delivery.processing_started_at = None
+        delivery.processing_token = None
+
+        delivery.save(update_fields=[
+            "status",
+            "last_response_status",
+            "processing_started_at",
+            "processing_token",
+        ])
+
+    return True
