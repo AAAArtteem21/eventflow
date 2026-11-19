@@ -40,27 +40,13 @@ def send_delivery(delivery: Delivery) -> bool:
     if processing_token is None:
         return False
 
-    with transaction.atomic():
-        current = (
-            Delivery.objects.select_for_update()
-            .get(id=delivery.id)
-        )
+    attempt = start_delivery_attempt(
+        delivery.id,
+        processing_token,
+    )
 
-        if (
-            current.status != Delivery.Status.PROCESSING
-            or current.processing_token != processing_token
-        ):
-            return False
-
-        current.attempts += 1
-        attempt_number = current.attempts
-
-        current.save(update_fields=["attempts", "updated_at"])
-
-        attempt = DeliveryAttempt.objects.create(
-            delivery=current,
-            attempt_number=attempt_number,
-        )
+    if not attempt:
+        return False
 
     event = delivery.event
 
@@ -133,28 +119,20 @@ def send_delivery(delivery: Delivery) -> bool:
 
     next_retry_at = None
 
-    if retryable and attempt_number < MAX_ATTEMPTS:
-        delay = get_retry_delay(attempt_number)
+    if retryable and attempt.attempt_number < MAX_ATTEMPTS:
+        delay = get_retry_delay(attempt.attempt_number)
         next_retry_at = timezone.now() + timedelta(seconds=delay)
 
+    finish_delivery_attempt(
+        attempt.id,
+        response_status=response_status,
+        response_body=response_body,
+        error=error,
+    )
+
     with transaction.atomic():
-        current = (
-            Delivery.objects.select_for_update()
-            .get(id=delivery.id)
-        )
-
-        attempt.response_status = response_status
-        attempt.response_body = response_body
-        attempt.error = error or ""
-        attempt.finished_at = timezone.now()
-
-        attempt.save(
-            update_fields=[
-                "response_status",
-                "response_body",
-                "error",
-                "finished_at",
-            ]
+        current = Delivery.objects.select_for_update().get(
+            id=delivery.id,
         )
 
         if (
@@ -304,3 +282,34 @@ def generate_signature(secret, payload):
         msg=payload,
         digestmod=hashlib.sha256,
     ).hexdigest()
+
+
+def start_delivery_attempt(delivery_id, processing_token):
+    with transaction.atomic():
+        delivery = Delivery.objects.select_for_update().get(id=delivery_id)
+        if delivery.status != Delivery.Status.PROCESSING:
+            return False
+        if delivery.processing_token != processing_token:
+            return None
+        delivery.attempts += 1
+        delivery.save(update_fields=("attempts",))
+        tryes_attempt = DeliveryAttempt.objects.create(attempt_number=delivery.attempts,delivery=delivery)
+
+    return tryes_attempt
+
+
+def finish_delivery_attempt(
+    attempt_id,
+    response_status=None,
+    response_body="",
+    error=None,
+):
+    with transaction.atomic():
+        attempt = DeliveryAttempt.objects.select_for_update().get(id=attempt_id)
+        attempt.response_status = response_status
+        attempt.response_body = response_body
+        attempt.error = error
+        finished_at =  timezone.now()
+        attempt.finished_at = finished_at
+        attempt.save()
+    return attempt
