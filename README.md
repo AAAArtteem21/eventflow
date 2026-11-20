@@ -54,7 +54,7 @@ than once, so receivers must deduplicate (see below).
 ### Setup
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/AAAArtteem21/eventflow
 cd eventflow
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
