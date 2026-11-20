@@ -12,6 +12,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from deliveres.tasks import enqueue_deliveries
 from django_filters.rest_framework import DjangoFilterBackend
 from .filters import EventFilter
+from drf_spectacular.utils import extend_schema
 
 IDEMPOTENCY_CONSTRAINT = "unique_event_idempotency_per_owner"
 
@@ -51,7 +52,16 @@ class EventViewSets(
         if self.action == "retrieve":
             return EventDetailSerializer
         return EventSerializer
-
+    @extend_schema(
+        summary="Отправить событие",
+        description=(
+            "Создаёт событие и доставки для всех активных endpoints, "
+            "подписанных на `event_type`. `idempotency_key` должен быть "
+            "уникальным для вашего аккаунта: повторный запрос с тем же "
+            "ключом вернёт 409. Максимальный размер payload: 64 КБ."
+        ),
+        responses={201: EventSerializer, 409: None, 429: None},
+    )
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

@@ -140,3 +140,41 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 10.0,
     },
 }
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {
+            "format": "{asctime} {levelname} {name} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+    },
+    "loggers": {
+        "deliveres": {"handlers": ["console"], "level": "INFO"},
+        "events": {"handlers": ["console"], "level": "INFO"},
+    },
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "EventFlow API",
+    "DESCRIPTION": (
+        "Webhook delivery platform.\n\n"
+        "**Как это работает:** создайте endpoint, подпишите его на типы "
+        "событий, отправьте событие через POST /api/events/. EventFlow "
+        "доставит его на все подходящие endpoints и повторит при сбоях.\n\n"
+        "**Гарантия:** at-least-once. Одно событие может прийти дважды, "
+        "дедуплицируйте по заголовку `X-EventFlow-Delivery`.\n\n"
+        "**Подпись:** каждый запрос подписан HMAC-SHA256 в заголовке "
+        "`X-EventFlow-Signature` (формат `sha256=<hex>`), ключ: secret "
+        "вашего endpoint."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}

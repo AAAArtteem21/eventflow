@@ -3,7 +3,7 @@ from rest_framework.exceptions import NotFound, MethodNotAllowed
 from rest_framework.decorators import action
 from .serializers import EndpointSerializer, EndpointCreateSerializer
 from .models import Endpoint
-
+from drf_spectacular.utils import extend_schema, extend_schema_view
 
 class EndpointViewSets(
     mixins.CreateModelMixin,
@@ -36,6 +36,15 @@ class EndpointViewSets(
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
+    @extend_schema(
+        summary="Деактивировать endpoint",
+        description=(
+            "Прекращает доставку на этот endpoint. Уже созданные доставки "
+            "получат статус FAILED с ошибкой `Endpoint is inactive`."
+        ),
+        request=None,
+        responses={200: EndpointSerializer},
+    )
     @action(detail=True, methods=["post"])
     def deactivate(self, request, pk=None):
         endpoint = self.get_object()
@@ -46,6 +55,12 @@ class EndpointViewSets(
         serializer = self.get_serializer(endpoint)
         return Response(serializer.data)
 
+    @extend_schema(
+        summary="Активировать endpoint",
+        description="Возобновляет доставку. Операция идемпотентна.",
+        request=None,
+        responses={200: EndpointSerializer},
+    )
     @action(detail=True, methods=["post"])
     def activate(self, request, pk=None):
         endpoint = self.get_object()
@@ -56,6 +71,16 @@ class EndpointViewSets(
         serializer = self.get_serializer(endpoint)
         return Response(serializer.data)
 
+    @extend_schema(
+        summary="Выпустить новый secret",
+        description=(
+            "Генерирует новый secret и показывает его в ответе **один раз**. "
+            "Старый secret перестаёт действовать сразу. Доставки, которые "
+            "уже в очереди или ждут повтора, будут подписаны новым secret."
+        ),
+        request=None,
+        responses={200: EndpointCreateSerializer},
+    )
     @action(detail=True, methods=["post"], url_path="rotate-secret")
     def rotate_secret(self, request, pk=None):
         endpoint = self.get_object()

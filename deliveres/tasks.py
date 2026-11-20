@@ -6,7 +6,9 @@ from .services import send_delivery, claim_delivery, recover_stuck_deliveries
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
+import logging
 
+logger = logging.getLogger(__name__)
 
 
 @shared_task
@@ -80,10 +82,11 @@ def dispatch_outbox_messages():
 
     for message in outbox_messages:
         try:
-            send_delivery_task.delay(
-                str(message.delivery_id)
-            )
+            send_delivery_task.delay(str(message.delivery_id))
         except Exception:
+            logger.exception(
+                "Failed to publish outbox message %s", message.id
+            )
             continue
 
         updated = OutboxMessage.objects.filter(

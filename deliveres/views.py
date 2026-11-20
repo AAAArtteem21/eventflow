@@ -9,6 +9,7 @@ from .serializers import DeliverAttemptSerializer, DeliverySerializer, DeliveryD
 from deliveres.filtres import DeliveryFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
+from drf_spectacular.utils import extend_schema
 
 class DeliveryAttemptViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DeliverAttemptSerializer
@@ -52,7 +53,15 @@ class DeliveryViewSet(viewsets.ReadOnlyModelViewSet):
             .filter(event__owner=self.request.user)
             .select_related("event", "endpoint")
         )
-
+    @extend_schema(
+        summary="Повторить доставку",
+        description=(
+            "Ставит доставку в очередь заново. Работает только для статуса "
+            "FAILED, иначе вернётся 409."
+        ),
+        request=None,
+        responses={200: DeliverySerializer, 409: None},
+    )
     @action(detail=True, methods=['post'])
     def retry(self, request, pk=None):
         delivery = self.get_object()
