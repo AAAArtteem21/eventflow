@@ -325,10 +325,12 @@ def finish_delivery_attempt(
 ):
     with transaction.atomic():
         attempt = DeliveryAttempt.objects.select_for_update().get(id=attempt_id)
+        if attempt.finished_at is not None:
+            return False
         attempt.response_status = response_status
         attempt.response_body = response_body
         attempt.error = error
         finished_at =  timezone.now()
         attempt.finished_at = finished_at
         attempt.save()
-    return attempt
+    return True
