@@ -12,6 +12,13 @@ from deliveres.tasks import enqueue_deliveries
 from django_filters.rest_framework import DjangoFilterBackend
 from .filters import EventFilter
 
+IDEMPOTENCY_CONSTRAINT = "unique_event_idempotency_per_owner"
+
+
+def _is_idempotency_conflict(exc: IntegrityError) -> bool:
+    diag = getattr(exc.__cause__, "diag", None)
+    return getattr(diag, "constraint_name", None) == IDEMPOTENCY_CONSTRAINT
+
 class EventViewSets(
     mixins.CreateModelMixin,
     mixins.ListModelMixin,
@@ -54,13 +61,11 @@ class EventViewSets(
                     lambda: enqueue_deliveries(delivery_ids)
                 )
 
-        except IntegrityError:
+        except IntegrityError as exc:
+            if not _is_idempotency_conflict(exc):
+                raise
             return Response(
-                {
-                    "detail": (
-                        "Event with this idempotency key already exists."
-                    )
-                },
+                {"detail": "Event with this idempotency key already exists."},
                 status=status.HTTP_409_CONFLICT,
             )
 

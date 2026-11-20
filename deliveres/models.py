@@ -107,6 +107,10 @@ class OutboxMessage(models.Model):
         on_delete=models.CASCADE,
         related_name="outbox_messages",
     )
+    claim_token = models.UUIDField(
+        null=True,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     claimed_at = models.DateTimeField(null=True, blank=True)
     processed_at = models.DateTimeField(null=True, blank=True)

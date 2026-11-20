@@ -1,11 +1,12 @@
 from celery import shared_task
 from datetime import timedelta
-
+import uuid
 from .models import Delivery, OutboxMessage
 from .services import send_delivery, claim_delivery, recover_stuck_deliveries
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
+
 
 
 @shared_task
@@ -49,6 +50,7 @@ def enqueue_deliveries(delivery_ids):
 
 @shared_task
 def dispatch_outbox_messages():
+    claim_token = uuid.uuid4()
     now = timezone.now()
     deadline = now - timedelta(minutes=5)
 
@@ -72,7 +74,7 @@ def dispatch_outbox_messages():
 
         OutboxMessage.objects.filter(
             id__in=message_ids,
-        ).update(claimed_at=now)
+        ).update(claimed_at=now, claim_token=claim_token)
 
     published_count = 0
 
@@ -84,14 +86,16 @@ def dispatch_outbox_messages():
         except Exception:
             continue
 
-        OutboxMessage.objects.filter(
+        updated = OutboxMessage.objects.filter(
             id=message.id,
             processed_at__isnull=True,
+            claim_token=claim_token,
         ).update(
             processed_at=timezone.now(),
             claimed_at=None,
         )
 
-        published_count += 1
+        if updated:
+            published_count += 1
 
     return published_count
