@@ -6,7 +6,9 @@ from rest_framework import status
 from .services import retry_delivery
 from .models import DeliveryAttempt, Delivery
 from .serializers import DeliverAttemptSerializer, DeliverySerializer
-
+from deliveres.filtres import DeliveryFilter
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter
 
 class DeliveryAttemptViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DeliverAttemptSerializer
@@ -33,6 +35,11 @@ class DeliveryAttemptViewSet(viewsets.ReadOnlyModelViewSet):
 class DeliveryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DeliverySerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_class = DeliveryFilter
+
+    ordering_fields = ["created_at", "updated_at", "attempts"]
+    ordering = ["-created_at"]
 
     def get_queryset(self):
         return (
