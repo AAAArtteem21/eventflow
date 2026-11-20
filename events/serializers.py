@@ -9,6 +9,9 @@ MAX_PAYLOAD_BYTES = 64 * 1024
 class EventSerializer(serializers.ModelSerializer):
 
     def validate_payload(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Payload must be an object.")
+
         size = len(
             json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         )

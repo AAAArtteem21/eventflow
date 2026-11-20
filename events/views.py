@@ -8,6 +8,7 @@ from deliveres.services import (
     create_deliveries_for_event,
     enqueue_deliveries,
 )
+from rest_framework.throttling import ScopedRateThrottle
 from deliveres.tasks import enqueue_deliveries
 from django_filters.rest_framework import DjangoFilterBackend
 from .filters import EventFilter
@@ -31,6 +32,12 @@ class EventViewSets(
     filterset_class = EventFilter
 
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_throttles(self):
+        if self.action == "create":
+            self.throttle_scope = "event_create"
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
 
     def get_queryset(self):
         queryset = Event.objects.filter(owner=self.request.user)

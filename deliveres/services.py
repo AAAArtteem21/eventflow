@@ -279,8 +279,8 @@ def retry_delivery(delivery_id, user):
     return delivery
 
 def recover_stuck_deliveries():
-    stuck_before = timezone.now() - timedelta(minutes=5)
     now = timezone.now()
+    stuck_before = now - timedelta(minutes=5)
 
     with transaction.atomic():
         deliveries = list(
@@ -291,21 +291,17 @@ def recover_stuck_deliveries():
         )
 
         if not deliveries:
-            return 0
+            return []
 
         delivery_ids = [delivery.id for delivery in deliveries]
 
-        unfinished_attempts = DeliveryAttempt.objects.select_for_update().filter(
+        DeliveryAttempt.objects.select_for_update().filter(
             delivery_id__in=delivery_ids,
             finished_at__isnull=True,
-        )
-
-        unfinished_attempts.update(
+        ).update(
             error="Worker interrupted",
             finished_at=now,
         )
-
-        recovered_count = len(deliveries)
 
         Delivery.objects.filter(
             id__in=delivery_ids,
@@ -317,7 +313,7 @@ def recover_stuck_deliveries():
             updated_at=now,
         )
 
-    return recovered_count
+    return delivery_ids
 
 def save_delivery_result(delivery_id, processing_token, status, response_status=None):
     with transaction.atomic():
