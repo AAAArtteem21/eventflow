@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from rest_framework import mixins, viewsets, permissions, status
-from .serializers import EventSerializer
+from .serializers import EventSerializer, EventDetailSerializer
 from .models import Event
 from django.db import IntegrityError, transaction
 from rest_framework.response import Response
@@ -9,6 +9,8 @@ from deliveres.services import (
     enqueue_deliveries,
 )
 from deliveres.tasks import enqueue_deliveries
+from django_filters.rest_framework import DjangoFilterBackend
+from .filters import EventFilter
 
 class EventViewSets(
     mixins.CreateModelMixin,
@@ -18,11 +20,23 @@ class EventViewSets(
 ):
     serializer_class = EventSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = EventFilter
 
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
-        return Event.objects.filter(owner=self.request.user)
+        queryset = Event.objects.filter(owner=self.request.user)
+
+        if self.action == "retrieve":
+            queryset = queryset.prefetch_related("deliveries__endpoint")
+
+        return queryset
+
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return EventDetailSerializer
+        return EventSerializer
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
