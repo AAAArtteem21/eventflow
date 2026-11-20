@@ -1,6 +1,6 @@
 from rest_framework import viewsets, mixins, permissions
 from rest_framework.exceptions import NotFound, MethodNotAllowed
-
+from rest_framework.decorators import action
 from .serializers import EndpointSerializers
 from .models import Endpoint
 
@@ -9,25 +9,44 @@ class EndpointViewSets(
     mixins.CreateModelMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
     serializer_class = EndpointSerializers
     permission_classes = [permissions.IsAuthenticated]
 
+    http_method_names = [
+        "get",
+        "post",
+        "patch",
+        "head",
+        "options",
+    ]
+
     def get_queryset(self):
-        return Endpoint.objects.filter(owner=self.request.user)
+        return Endpoint.objects.filter(
+            owner=self.request.user
+        )
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
-    def update(self, request, *args, **kwargs):
-        self.get_object()
-        raise MethodNotAllowed("PUT")
+    @action(detail=True, methods=["post"])
+    def deactivate(self, request, pk=None):
+        endpoint = self.get_object()
+        if endpoint.is_active:
+            endpoint.is_active = False
+            endpoint.save(update_fields=["is_active"])
 
-    def partial_update(self, request, *args, **kwargs):
-        self.get_object()
-        raise MethodNotAllowed("PATCH")
+        serializer = self.get_serializer(endpoint)
+        return Response(serializer.data)
 
-    def destroy(self, request, *args, **kwargs):
-        self.get_object()
-        raise MethodNotAllowed("DELETE")
+    @action(detail=True, methods=["post"])
+    def activate(self, request, pk=None):
+        endpoint = self.get_object()
+        if not endpoint.is_active:
+            endpoint.is_active = True
+            endpoint.save(update_fields=["is_active"])
+
+        serializer = self.get_serializer(endpoint)
+        return Response(serializer.data)

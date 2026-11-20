@@ -10,8 +10,11 @@ from datetime import timedelta
 import hashlib
 import hmac
 from endpoints.validators import validate_endpoint_url
+import logging
 
 MAX_ATTEMPTS = 8
+
+logger = logging.getLogger(__name__)
 
 @transaction.atomic
 def create_deliveries_for_event(event):
@@ -34,11 +37,67 @@ def create_deliveries_for_event(event):
 
     OutboxMessage.objects.bulk_create(outbox_messages)
 
+def _finalize_delivery(
+    delivery_id,
+    processing_token,
+    *,
+    status,
+    response_status=None,
+    error=None,
+    next_retry_at=None,
+) -> bool:
+    """
+    Записывает итог обработки Delivery и освобождает claim.
+    Возвращает False, если токен устарел (запись уже перехвачена
+    recovery или другим worker) - в этом случае ничего не меняем.
+    """
+    with transaction.atomic():
+        current = Delivery.objects.select_for_update().get(id=delivery_id)
+
+        if (
+            current.status != Delivery.Status.PROCESSING
+            or current.processing_token != processing_token
+        ):
+            return False
+
+        current.status = status
+        current.last_response_status = response_status
+        current.last_error = error or ""
+        current.next_retry_at = next_retry_at
+        current.processing_started_at = None
+        current.processing_token = None
+
+        current.save(
+            update_fields=[
+                "status",
+                "last_response_status",
+                "last_error",
+                "next_retry_at",
+                "processing_started_at",
+                "processing_token",
+                "updated_at",
+            ]
+        )
+
+    return True
+
+
 def send_delivery(delivery: Delivery) -> bool:
     processing_token = delivery.processing_token
 
     if processing_token is None:
         return False
+
+    endpoint = Endpoint.objects.filter(id=delivery.endpoint_id).first()
+
+    if endpoint is None or not endpoint.is_active:
+        return _finalize_delivery(
+            delivery.id,
+            processing_token,
+            status=Delivery.Status.FAILED,
+            error="Endpoint is inactive",
+            next_retry_at=None,
+        )
 
     attempt = start_delivery_attempt(
         delivery.id,
@@ -64,7 +123,7 @@ def send_delivery(delivery: Delivery) -> bool:
     ).encode("utf-8")
 
     signature = generate_signature(
-        delivery.endpoint.secret,
+        endpoint.secret,
         payload_bytes,
     )
 
@@ -80,14 +139,14 @@ def send_delivery(delivery: Delivery) -> bool:
     retryable = False
 
     try:
-        validate_endpoint_url(delivery.endpoint.url)
+        validate_endpoint_url(endpoint.url)
 
         with httpx.Client(
             timeout=10.0,
             follow_redirects=False,
         ) as client:
             response = client.post(
-                delivery.endpoint.url,
+                endpoint.url,
                 content=payload_bytes,
                 headers=headers,
             )
@@ -117,6 +176,14 @@ def send_delivery(delivery: Delivery) -> bool:
         retryable = True
         error = f"Request error: {type(exc).__name__}"
 
+    except Exception as exc:
+        logger.exception(
+            "Unexpected error while sending delivery %s", delivery.id
+        )
+        status = Delivery.Status.FAILED
+        retryable = False
+        error = f"Unexpected error: {type(exc).__name__}"
+
     next_retry_at = None
 
     if retryable and attempt.attempt_number < MAX_ATTEMPTS:
@@ -130,37 +197,15 @@ def send_delivery(delivery: Delivery) -> bool:
         error=error,
     )
 
-    with transaction.atomic():
-        current = Delivery.objects.select_for_update().get(
-            id=delivery.id,
-        )
+    return _finalize_delivery(
+        delivery.id,
+        processing_token,
+        status=status,
+        response_status=response_status,
+        error=error,
+        next_retry_at=next_retry_at,
+    )
 
-        if (
-            current.status != Delivery.Status.PROCESSING
-            or current.processing_token != processing_token
-        ):
-            return False
-
-        current.status = status
-        current.last_response_status = response_status
-        current.last_error = error or ""
-        current.next_retry_at = next_retry_at
-        current.processing_started_at = None
-        current.processing_token = None
-
-        current.save(
-            update_fields=[
-                "status",
-                "last_response_status",
-                "last_error",
-                "next_retry_at",
-                "processing_started_at",
-                "processing_token",
-                "updated_at",
-            ]
-        )
-
-    return True
 
 def enqueue_deliveries(delivery_ids):
     for delivery_id in delivery_ids:
