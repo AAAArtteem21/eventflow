@@ -128,4 +128,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "deliveres.tasks.recover_stuck_deliveries_task",
         "schedule": 60.0,
     },
+    "dispatch-outbox": {
+        "task": "deliveres.tasks.dispatch_outbox_messages",
+        "schedule": 10.0,
+    },
 }

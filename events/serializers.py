@@ -2,8 +2,22 @@ from rest_framework import serializers
 from .models import Event
 from endpoints.models import Endpoint
 from deliveres.models import Delivery
+import json
+
+MAX_PAYLOAD_BYTES = 64 * 1024
 
 class EventSerializer(serializers.ModelSerializer):
+
+    def validate_payload(self, value):
+        size = len(
+            json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        )
+        if size > MAX_PAYLOAD_BYTES:
+            raise serializers.ValidationError(
+                f"Payload is too large (max {MAX_PAYLOAD_BYTES} bytes)."
+            )
+        return value
+
     class Meta:
         model = Event
         fields = [

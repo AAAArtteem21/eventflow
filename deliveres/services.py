@@ -36,6 +36,7 @@ def create_deliveries_for_event(event):
     outbox_messages = [OutboxMessage(delivery=delivery) for delivery in created]
 
     OutboxMessage.objects.bulk_create(outbox_messages)
+    return created
 
 def _finalize_delivery(
     delivery_id,
