@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .services import retry_delivery
 from .models import DeliveryAttempt, Delivery
-from .serializers import DeliverAttemptSerializer, DeliverySerializer
+from .serializers import DeliverAttemptSerializer, DeliverySerializer, DeliveryDetailSerializer
 from deliveres.filtres import DeliveryFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
@@ -40,6 +40,11 @@ class DeliveryViewSet(viewsets.ReadOnlyModelViewSet):
 
     ordering_fields = ["created_at", "updated_at", "attempts"]
     ordering = ["-created_at"]
+
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return DeliveryDetailSerializer
+        return DeliverySerializer
 
     def get_queryset(self):
         return (

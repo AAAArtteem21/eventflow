@@ -54,3 +54,9 @@ class EndpointSerializer(serializers.ModelSerializer):
                 )
             cleaned.append(event)
         return list(dict.fromkeys(cleaned))
+
+
+class EndpointCreateSerializer(EndpointSerializer):
+    class Meta(EndpointSerializer.Meta):
+        fields = EndpointSerializer.Meta.fields + ["secret"]
+        read_only_fields = EndpointSerializer.Meta.read_only_fields + ["secret"]
